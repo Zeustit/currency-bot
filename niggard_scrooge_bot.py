@@ -21,8 +21,16 @@ def start(m, res=False):
     btn2 = types.KeyboardButton("Курс обмена на киви")
     btn3 = types.KeyboardButton("Инфо")
     markup.add(btn1, btn2, btn3)
-    msg = bot.send_message(m.chat.id, "Бот передает текущий курс обмена на киви и самое дешевое предложение на покупку тенге", reply_markup = markup)
+    bot.send_message(m.chat.id, 'Список доступных команд:', reply_markup = markup)
 
+@bot.message_handler(content_types=['text'])
+def send_text(m):
+    if m.text.lower() == 'проверить курс на p2p':
+        check_valuta(m)
+    elif m.text.lower() == 'курс обмена на киви':
+        check_currency_message(m)
+    elif m.text.lower() == 'инфо':
+        bot.send_sticker(m.chat.id, 'CAADAgADZgkAAnlc4gmfCor5YbYYRAI')
 
 #---------------------------------------Функции связанные с функцией выбора просматриваемого курса 
 #Выводим выбор валюты, и начинаем последовательное выполнение следующих функций.
@@ -31,20 +39,24 @@ def check_valuta(m):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     btn1 = types.KeyboardButton("Тенге ₸")
     btn2 = types.KeyboardButton("Рубли ₽")
-    markup.add(btn1, btn2)
+    back_btn = types.KeyboardButton("🔙 Назад")
+
+    markup.add(btn1, btn2, back_btn)
     msg = bot.send_message(m.chat.id, "Выберите курс какой валюты вы хотите узнать", reply_markup = markup)
     bot.register_next_step_handler(msg, check_payment_system)
 
 #В зависимости от выбора 
 def check_payment_system(m):
     currency_result = []
+    if m.text[2:len(m.text)] == 'Назад':
+        start(m)
     if (m.text == "Тенге ₸"):
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         currency_result.append("KZT")
         btn1 = types.KeyboardButton("🥝 QIWI")
         btn2 = types.KeyboardButton("🇰🇿HalykBank")
-        btn3 = types.KeyboardButton("🔙 Назад")
-        markup.add(btn1, btn2, btn3)
+        back_btn = types.KeyboardButton("🔙 Назад")
+        markup.add(btn1, btn2, back_btn)
         msg = bot.send_message(m.chat.id, "Выберите платежную систему", reply_markup = markup)
         bot.register_next_step_handler(msg, check_trade_type, currency_result)
 
@@ -54,19 +66,24 @@ def check_payment_system(m):
         btn1 = types.KeyboardButton("🥝 QIWI")
         btn2 = types.KeyboardButton("💵 Tinkoff")
         btn3 = types.KeyboardButton("🅰️Advcash")
-        btn4 = types.KeyboardButton("🔙 Назад")
-        markup.add(btn1,btn2,btn3, btn4)
+        back_btn = types.KeyboardButton("🔙 Назад")
+        markup.add(btn1,btn2,btn3, back_btn)
         msg = bot.send_message(m.chat.id, "Выберите платежную систему", reply_markup = markup)
         bot.register_next_step_handler(msg, check_trade_type, currency_result) 
 
 def check_trade_type(m, currency_result):
-    currency_result.append(m.text[2:len(m.text)])
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn1 = types.KeyboardButton("BUY")
-    btn2 = types.KeyboardButton("SELL")
-    markup.add(btn1,btn2)
-    msg = bot.send_message(m.chat.id, "Выберите тип операции", reply_markup = markup)
-    bot.register_next_step_handler(msg, check_price_send_message, currency_result)
+    if m.text[2:len(m.text)] == 'Назад':
+        start(m)
+    else:
+        currency_result.append(m.text[2:len(m.text)])
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        btn1 = types.KeyboardButton("BUY")
+        btn2 = types.KeyboardButton("SELL")
+        back_btn = types.KeyboardButton("🔙 Назад")
+
+        markup.add(btn1,btn2, back_btn)
+        msg = bot.send_message(m.chat.id, "Выберите тип операции", reply_markup = markup)
+        bot.register_next_step_handler(msg, check_price_send_message, currency_result)
 
 #Функция отправки пользователю текущей цены
 def check_price_send_message(m, currency_result):
@@ -77,6 +94,7 @@ def check_price_send_message(m, currency_result):
     markup = types.ReplyKeyboardRemove(selective=False)
     bot.send_message(m.chat.id, check_price(pay_type,fiat_type,trade_type), reply_markup = markup)
     bot.clear_step_handler_by_chat_id(m)
+    start(m)
 
 #Функция отправки пользователю текущего курса обмена
 @bot.message_handler(commands=["check_currency_qiwi"])
@@ -107,6 +125,9 @@ def check_qiwi_currency(currency_to, currency_from):
 def check_price(pay_type, fiat_type, trade_type):
     #массив в который будет записан результат выполнения функции
     data_array = []
+    min_transaction_array = []
+    max_transaction_array = []
+
     result = ""
     #какую валюту покупаем
     buy_type = "USDT"
@@ -151,8 +172,11 @@ def check_price(pay_type, fiat_type, trade_type):
         #добавляем в результат информацию по каждому предложению
         for i in range(0, offer_count-1):
             data_array.append(data['data'][i]['adv']['price'])
+            min_transaction_array.append(data['data'][i]['adv']['minSingleTransAmount'])
+            max_transaction_array.append(data['data'][i]['adv']['maxSingleTransAmount'])
+
             #форматируем массив для вывода одним сообщением
-            result += data_array[i] + fiat_symbol + '\n'
+            result += data_array[i] + ' Лимиты ' + min_transaction_array[i] + '--' + max_transaction_array[i] + fiat_symbol + '\n'
 
         if trade_type == "BUY":
             trade_type = "покупке"
